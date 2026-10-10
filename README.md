@@ -1,10 +1,10 @@
-# 苍穹外卖 · AI 智能客服系统
+# 天云外卖 · AI 智能客服系统
 
-> 毕业设计项目：在苍穹外卖（Spring Boot 版）基础上，基于 Spring AI 接入通义千问大模型，构建外卖平台的 **AI 智能客服** 与 **商家 AI 经营助手**。
+> 毕业设计项目：在天云外卖（Spring Boot 版）基础上，基于 Spring AI 接入通义千问大模型，构建外卖平台的 **AI 智能客服** 与 **商家 AI 经营助手**。
 
 一个仓库包含两个服务：
 
-- **`backend/`** —— 苍穹外卖主项目（管理端 + 用户端 REST API）
+- **`backend/`** —— 天云外卖主项目（管理端 + 用户端 REST API）
 - **`ai-service/`** —— AI 客服子服务（大模型对话、RAG 知识库检索、业务工具调用）
 
 三大终端均已打通：**Vue3 管理后台、微信小程序（uni-app）、AI 客服聊天页（商家端 / 用户端）**。
@@ -49,7 +49,7 @@
 
 ```
 sky-take-out/
-├── backend/                      # 苍穹外卖主项目
+├── backend/                      # 天云外卖主项目
 │   ├── sky-common/               # 公共模块（工具、常量、异常）
 │   ├── sky-pojo/                 # 实体/DTO/VO
 │   └── sky-server/               # 启动模块（controller / service / mapper）
