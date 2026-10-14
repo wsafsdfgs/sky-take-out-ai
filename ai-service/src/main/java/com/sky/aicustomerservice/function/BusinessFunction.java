@@ -37,7 +37,7 @@ public class BusinessFunction {
      *
      * 调用主项目工作台接口获取今日营业额、订单量、客单价等经营数据。
      */
-    @Tool(description = "查询店铺今日营业数据（营业额、订单量、客单价、新增用户数、平均客单价）")
+    @Tool(description = "实时查询店铺今日营业数据（营业额、订单量、客单价、新增用户数、平均客单价）。经营数据以本工具返回为准，每次询问务必重新调用获取最新值，勿凭历史或记忆作答")
     public String queryBusinessData(ToolContext toolContext) {
         try {
             String adminToken = (String) toolContext.getContext().get("adminToken");
@@ -59,7 +59,7 @@ public class BusinessFunction {
      *
      * 调用主项目工作台订单总览接口，获取待接单、待派送、已完成等各状态订单数量。
      */
-    @Tool(description = "查询店铺订单管理概况（待接单、待派送、派送中、已完成、已取消等各状态订单数量）")
+    @Tool(description = "实时查询店铺订单管理概况（待接单、待派送、派送中、已完成、已取消等各状态订单数量），每次询问务必重新调用获取最新数据")
     public String queryOrderOverview(ToolContext toolContext) {
         try {
             String adminToken = (String) toolContext.getContext().get("adminToken");
@@ -84,7 +84,7 @@ public class BusinessFunction {
      * @param begin 开始日期，格式 yyyy-MM-dd
      * @param end   结束日期，格式 yyyy-MM-dd
      */
-    @Tool(description = "查询销量排名Top10菜品，需要传开始日期和结束日期（格式yyyy-MM-dd），如查询今日可传当天日期")
+    @Tool(description = "实时查询销量排名Top10菜品，需要传开始日期和结束日期（格式yyyy-MM-dd），如查询今日可传当天日期；务必调用本工具获取最新排行")
     public String queryTop10(
             @ToolParam(description = "开始日期，格式yyyy-MM-dd") String begin,
             @ToolParam(description = "结束日期，格式yyyy-MM-dd") String end,
@@ -109,7 +109,7 @@ public class BusinessFunction {
      *
      * 调用主项目接口查询当前店铺是否营业。
      */
-    @Tool(description = "查询店铺当前营业状态（是否营业）")
+    @Tool(description = "实时查询店铺当前营业状态（是否营业），每次询问务必重新调用获取最新状态")
     public String queryShopStatus(ToolContext toolContext) {
         try {
             String adminToken = (String) toolContext.getContext().get("adminToken");

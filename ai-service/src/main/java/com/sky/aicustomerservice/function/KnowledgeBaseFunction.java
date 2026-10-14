@@ -39,7 +39,7 @@ public class KnowledgeBaseFunction {
      * @param question 用户想了解的问题（如退款流程、售后规则、投诉渠道等）
      * @return 检索到的知识库文档拼接文本；没有匹配则返回提示
      */
-    @Tool(description = "检索外卖平台售后知识库，获取退款、售后、投诉等流程规则，回答用户关于售后流程的问题")
+    @Tool(description = "检索外卖平台售后知识库，获取退款、售后、投诉等流程规则。务必调用本工具检索，勿凭记忆编造售后规则")
     public String queryKnowledgeBase(
             @ToolParam(description = "用户关于退款/售后/投诉/赔付等流程的问题") String question) {
         try {

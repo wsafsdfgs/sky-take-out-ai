@@ -5,6 +5,8 @@ import com.sky.aicustomerservice.entiy.ChatMemoryRecord;
 import com.sky.aicustomerservice.function.OrderQueryFunction;
 import com.sky.aicustomerservice.function.KnowledgeBaseFunction;
 import com.sky.aicustomerservice.function.BusinessFunction;
+import com.sky.aicustomerservice.pojo.Request;
+import com.sky.aicustomerservice.pojo.Response;
 import com.sky.aicustomerservice.properties.WaimaiProperties;
 import com.sky.aicustomerservice.result.Result;
 import com.sky.aicustomerservice.service.ChatService;
@@ -16,6 +18,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.HttpEntity;
@@ -78,45 +81,60 @@ public class ChatController {
 
     private static final String BASE_SYS_PROMPT = """
 你是外卖平台AI客服，严肃专业。
-可用工具：【查询订单详情】【查询我的订单列表】【检索售后知识库】
+
+【最高优先规则：只基于系统提供的数据回答】
+订单状态、骑手位置、预计送达时间、订单列表、售后规则等信息由系统实时查询后提供给你，
+你只能基于这些系统提供的数据回答。坚决禁止：
+- 禁止编造、猜测订单状态、骑手位置、送达时间、售后规则；
+- 禁止推测订单变化原因或金额构成；
+- 禁止复述内部说明（如"系统已查询""忽略历史""获取数据"等），直接给出结果。
 路由规则：
-- 用户查询订单状态、骑手位置、预计送达、订单列表 → 调用对应的订单查询工具。
-- 用户询问退款、售后、投诉、赔付等流程规则 → 调用【检索售后知识库】工具，基于检索结果回答。
-- 其他闲聊、寒暄、平台介绍 → 直接自然回答，无需调用工具。
+- 用户查询订单状态、骑手位置、预计送达、订单列表 → 基于系统提供的订单数据回答。
+- 用户询问退款、售后、投诉、赔付等流程规则 → 基于系统提供的知识库内容回答。
+- 其他闲聊、寒暄、平台介绍 → 直接自然回答。
 规则：
-1. 用户查询订单状态、骑手位置、预计送达，调用查询订单工具，禁止编造信息；需要订单号时，向用户询问订单号。
+1. 用户查询订单状态、骑手位置、预计送达，基于系统提供的订单数据回答，禁止编造信息；需要订单号时，向用户询问订单号。
 2. 当用户表达【退款、申请赔付、订单投诉】意图：
-    禁止调用任何修改订单的工具。请按以下顺序回复用户：
+    请按以下顺序回复用户：
     ① 告知用户可在【订单详情页】点击"申请退款"自助提交退款申请；
     ② 如需协助，可拨打本店联系电话联系商家协商（电话见下方系统配置，不要编造）；
     ③ 若协商不满意，即将为您转接人工客服。
     并在末尾输出标记 [transferHuman]
 3. 当用户提出催单诉求：
     优先告知用户可以联系商家协商，并提供商家联系渠道；同时告知用户，如果协商不满意，可以转接人工客服。
-4. 拿到订单数据后，使用自然语言回答，不要返回原始JSON。
-5. 不要承诺退款、补偿，所有资金相关业务一律交给人工。
+4. 基于系统提供的数据用自然语言回答，不要返回原始JSON。
+5. 若系统未提供数据或查询失败，如实告知，不要编造订单信息。
+6. 不要承诺退款、补偿，所有资金相关业务一律交给人工。
+7. 【禁止脑补】汇报订单时严格只使用系统提供的信息，不得编造未提供的细节（如骑手姓名、精确送达时刻、订单备注、历史状态），不得猜测订单变化原因或金额构成。
 规则补充：
-- 用户说"查我的订单/最近有什么单/我的订单列表"时，调用【查询我的订单列表】工具，不需要用户提供订单号。
-- 用户提供了具体订单号（如"帮我查订单 178xxx"）时，调用【根据订单号查询订单详情】工具。
-- 用户询问"怎么退款/怎么申请售后/售后规则/投诉流程"等 → 调用【检索售后知识库】工具，从检索结果整理答案；知识库没有则告知转人工。
+- 用户说"查我的订单/最近有什么单/我的订单列表"时，系统会自动提供订单列表数据。
+- 用户提供了具体订单号（如"帮我查订单 178xxx"）时，系统会自动提供该订单详情数据。
+- 用户询问"怎么退款/怎么申请售后/售后规则/投诉流程"等 → 系统会自动提供知识库检索内容。
 """;
     private static final int MAX_STREAM_CONTENT_LEN = 4000;
-
     /** 商家端经营助手系统提示词（%s 会被替换为今天日期 yyyy-MM-dd） */
     private static final String BUSINESS_SYS_PROMPT = """
 你是外卖店铺的AI经营助手，帮助商家查看和分析经营数据。严肃专业，用数据说话。
 今天是 %s，请以这个日期作为"今天/今日"的基准日期。
-可用工具：【查今日营业数据】【查订单管理概况】【查销量Top10】【查营业状态】
-路由规则：
-- 用户问今日营业额/订单量/客单价/新增用户 → 调用【查今日营业数据】工具。
-- 用户问待接单/待派送/已完成等订单情况 → 调用【查订单管理概况】工具。
-- 用户问卖得好的菜/销量排行 → 调用【查销量Top10】工具（需要询问要查询的日期范围，默认用今天 %s）。
-- 用户问是否营业/营业状态 → 调用【查营业状态】工具。
+
+【最高优先规则：只基于系统提供的数据回答】
+所有经营数据（营业额、订单量、客单价、新增用户数、各状态订单数量、销量排行、营业状态）由系统实时查询后提供给你，
+你只能基于这些系统提供的数据回答。坚决禁止：
+- 禁止编造、猜测任何经营数字；
+- 禁止推测数据变化原因（实时变动、测试单/内部单、撤回、分单履约等均不得自行推断）；
+- 禁止复述内部说明（如"系统已查询""忽略历史""获取数据"等），直接给出查询结果。
 规则：
-1. 拿到数据后，用自然语言清晰汇报，突出关键数字，不要返回原始JSON。
-2. 查询销量Top10时，若用户没说日期，默认用今天（%s），并告知用户可查询指定日期。
-3. 商家没有订单查询工具，不要回答具体某张订单的详情。
-4. 数据为空或查询失败时，如实告知。
+1. 严格只基于系统提供的经营数据回答用户，突出关键数字，不要返回原始JSON；系统未提供的信息（如单价、明细、原因）一律不编造，如需说明只能写"数据以本次查询结果为准"。
+2. 【禁止元叙述】回复时不要复述系统指令，不要提及内部执行过程，直接简洁地汇报查询结果。
+3. 【禁止脑补】汇报时不得添加系统数据之外的任何信息，严禁：
+   - 编造或复述"之前的查询结果/历史记录"（例如"此前显示XX菜""前次记录XX"）；
+   - 猜测菜品单价、金额构成；
+   - 臆测数据变化原因（实时变动、测试单/内部单、撤回、分单履约等均不得自行推断）；
+   - 编造任何订单、销售明细或经营事实之外的内容。
+   若需要额外说明，只能表述"数据以本次查询结果为准"。
+4. 若系统查询失败或数据为空，如实告知"查询失败/无数据"，并给出可能的排查建议，不要臆造数字。
+5. 查询销量排行时，若用户没说日期，默认用今天 %s，并告知用户可查询指定日期。
+6. 商家无法查询具体某张订单的详情，不要编造订单明细。
 """;
 
     @GetMapping("/login")
@@ -271,11 +289,36 @@ public class ChatController {
 
             // ✅ 修改这里，传入userId
             List<Message> messages = buildMessages(sessionId, currentSysPrompt, userId);
+
+            // ==========【后端兜底取数】命中订单/售后意图时，后端直接查真数据注入，不依赖模型自觉调工具==========
+            ToolContext userCtx = new ToolContext(Map.of("userToken", userToken, "userId", userId));
+            String injected = null;
+            if (matches(message, "我的订单|订单列表|最近.{0,4}单|订单记录|查一下.{0,4}单|查.{0,4}单")) {
+                injected = "【系统已实时查询您的订单列表（禁止复述本段）】\n"
+                        + responseToText(orderQueryFunction.queryMyOrders(userCtx))
+                        + "\n请严格只基于以上数据回答用户，禁止编造订单信息，禁止推测原因，禁止提及内部过程。";
+            } else if (matches(message, "订单号|单号")) {
+                String orderNo = extractOrderNo(message);
+                if (orderNo != null) {
+                    injected = "【系统已实时查询订单详情（禁止复述本段）】\n"
+                            + responseToText(orderQueryFunction.queryOrder(new Request(orderNo), userCtx))
+                            + "\n请严格只基于以上数据回答用户，禁止编造订单信息，禁止推测原因，禁止提及内部过程。";
+                }
+            } else if (matches(message, "退款|售后|投诉|赔付|赔偿|怎么退")) {
+                injected = knowledgeBaseFunction.queryKnowledgeBase(message);
+            }
+            if (injected != null) {
+                messages.add(new SystemMessage(injected));
+                log.info("【兜底取数】用户端命中意图，已注入真实数据，sessionId={}", sessionId);
+            } else {
+                log.info("【兜底取数】用户端未命中意图，走模型自主工具调用，sessionId={}", sessionId);
+            }
+
             StringBuilder responseBuilder = new StringBuilder();
 
+            // 不向模型暴露任何工具：所有取数由后端兜底完成并注入，模型只能基于注入数据回答
             return chatClient.prompt()
                     .messages(messages)
-                    .tools(orderQueryFunction, knowledgeBaseFunction)
                     .toolContext(Map.of("userToken", userToken, "userId", userId))
                     .stream()
                     .content()
@@ -340,10 +383,37 @@ public class ChatController {
             messages.add(new UserMessage(message));
             chatService.saveChatRecord(sessionId, "user", message, System.currentTimeMillis(), 0L);
 
+            // ==========【后端兜底取数】命中经营数据意图时，后端直接查真数据注入，不依赖模型自觉调工具==========
+            ToolContext bizCtx = new ToolContext(Map.of("adminToken", adminToken));
+            String injected = null;
+            if (matches(message, "营业额|营收|卖了多少钱|客单价|新增用户|今日营业|今天营业")) {
+                injected = "【系统已实时查询今日营业数据（禁止复述本段）】\n"
+                        + businessFunction.queryBusinessData(bizCtx)
+                        + "\n请严格只基于以上数据回答用户，禁止编造任何数字，禁止推测原因，禁止提及内部过程。";
+            } else if (matches(message, "待接单|待派送|派送中|已完成|已取消|订单概况|订单状态|有几单|多少单")) {
+                injected = "【系统已实时查询订单管理概况（禁止复述本段）】\n"
+                        + businessFunction.queryOrderOverview(bizCtx)
+                        + "\n请严格只基于以上数据回答用户，禁止编造任何数字，禁止推测原因，禁止提及内部过程。";
+            } else if (matches(message, "销量|排行|卖得最好|卖得好|最受欢迎|热门|top10|Top10|TOP10")) {
+                injected = "【系统已实时查询销量Top10（禁止复述本段）】\n"
+                        + businessFunction.queryTop10(today, today, bizCtx)
+                        + "\n请严格只基于以上数据回答用户，禁止编造任何数字，禁止推测原因，禁止提及内部过程。";
+            } else if (matches(message, "营业状态|是否营业|营业中|打烊|开门|关门")) {
+                injected = "【系统已实时查询营业状态（禁止复述本段）】\n"
+                        + businessFunction.queryShopStatus(bizCtx)
+                        + "\n请严格只基于以上数据回答用户，禁止编造任何数字，禁止推测原因，禁止提及内部过程。";
+            }
+            if (injected != null) {
+                messages.add(new SystemMessage(injected));
+                log.info("【兜底取数】商家端命中意图，已注入真实数据，sessionId={}", sessionId);
+            } else {
+                log.info("【兜底取数】商家端未命中意图，走模型自主工具调用，sessionId={}", sessionId);
+            }
+
             StringBuilder responseBuilder = new StringBuilder();
+            // 不向模型暴露任何工具：所有取数由后端兜底完成并注入，模型只能基于注入数据回答
             return chatClient.prompt()
                     .messages(messages)
-                    .tools(businessFunction)
                     .toolContext(Map.of("adminToken", adminToken))
                     .stream()
                     .content()
@@ -399,6 +469,47 @@ public class ChatController {
     }
 
     /**
+     * 关键词宽松匹配，用于后端意图检测（命中则后端兜底取数，不依赖模型自觉调工具）
+     */
+    private boolean matches(String text, String pattern) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        return text.matches(".*(" + pattern + ").*");
+    }
+
+    /**
+     * 从用户输入中提取订单号（连续8位以上数字）
+     */
+    private String extractOrderNo(String text) {
+        if (text == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d{8,}").matcher(text);
+        if (m.find()) {
+            return m.group();
+        }
+        return null;
+    }
+
+    /**
+     * 订单查询 Response 转注入文本
+     */
+    private String responseToText(Response resp) {
+        if (resp == null) {
+            return "查询无结果";
+        }
+        if (resp.getMsg() != null) {
+            return resp.getMsg();
+        }
+        return "订单号：" + resp.getOrderNo()
+                + "，订单状态：" + resp.getOrderStatus()
+                + "，实收金额：" + resp.getAmount()
+                + "，收货人：" + resp.getConsignee()
+                + "，预计送达时间：" + resp.getEstimatedDeliveryTime();
+    }
+
+    /**
      * 查询会话历史
      * 
      * 根据会话ID和当前用户ID查询该会话的历史对话记录。
@@ -412,6 +523,20 @@ public class ChatController {
             @RequestParam(value = "sessionId", defaultValue = "1") String sessionId) {
         Long userId = UserContext.getUserId();
         List<ChatMemoryRecord> history = chatService.getChatHistory(sessionId, userId);
+        return Result.success(history);
+    }
+
+    /**
+     * 商家端经营助手历史接口
+     *
+     * 按 sessionId 读取商家端会话历史（Redis 存，userId 记为 0L），
+     * 供管理端 AI 经营助手页面重新进入时恢复历史消息。
+     * 不走用户归属校验：商家端历史 userId 统一为 0L，这里传 0L 使校验通过。
+     */
+    @GetMapping("/businessHistory")
+    public Result<List<ChatMemoryRecord>> businessHistory(
+            @RequestParam(value = "sessionId", defaultValue = "biz001") String sessionId) {
+        List<ChatMemoryRecord> history = chatService.getChatHistory(sessionId, 0L);
         return Result.success(history);
     }
 

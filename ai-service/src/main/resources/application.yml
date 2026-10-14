@@ -1,12 +1,15 @@
 spring:
   ai:
-    dash scope:
-      api-key: ${DASHSCOPE_API_KEY}
+    dashscope:
+      api-key: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
       chat:
         options:
           model: qwen-plus
-          temperature: 0.6
+          temperature: 0.4
           max-tokens: 500
+      embedding:
+        options:
+          model: text-embedding-v3
   data:
     redis:
       host: localhost

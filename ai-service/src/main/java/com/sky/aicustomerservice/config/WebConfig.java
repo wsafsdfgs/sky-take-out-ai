@@ -18,7 +18,8 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/ai/**")
                 .excludePathPatterns("/ai/login")            // 用户登录（还没token）
                 .excludePathPatterns("/ai/businessLogin")     // 商家登录（还没token）
-                .excludePathPatterns("/ai/businessStream");   // 商家对话（商家token由主项目校验，AI不解析）
+                .excludePathPatterns("/ai/businessStream")     // 商家对话（商家token由主项目校验，AI不解析）
+                .excludePathPatterns("/ai/businessHistory");   // 商家历史（按 sessionId 读，AI 不解析 token）
     }
 
     @Override

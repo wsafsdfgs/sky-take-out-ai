@@ -55,7 +55,7 @@ public class OrderQueryFunction {
      * @param toolContext Spring AI 注入的上下文，包含用户token等信息
      * @return Response 包含订单详情的响应对象
      */
-    @Tool(description = "根据订单号查询外卖订单详情，获取订单状态、金额、收货人、预计送达时间")
+    @Tool(description = "实时根据订单号查询外卖订单详情，获取订单状态、金额、收货人、预计送达时间。务必调用本工具获取最新订单信息，勿凭历史或记忆作答")
     public Response queryOrder(Request request, ToolContext toolContext) {
         try {
             // 从工具上下文取用户token（不经过大模型，安全）
@@ -140,7 +140,7 @@ public class OrderQueryFunction {
      * @param toolContext Spring AI 注入的上下文，包含用户token等信息
      * @return Response 包含订单列表信息的响应对象
      */
-    @Tool(description = "查询当前用户的所有外卖订单列表，获取订单号、状态、金额")
+    @Tool(description = "实时查询当前用户的所有外卖订单列表，获取订单号、状态、金额。务必调用本工具获取最新订单数据")
     public Response queryMyOrders(ToolContext toolContext) {
         try {
             // 1. 从上下文取token（和queryOrder一样）
